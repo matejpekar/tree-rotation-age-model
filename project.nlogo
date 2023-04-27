@@ -1,15 +1,14 @@
 globals [
-  initial-trees   ;; how many trees (green patches) we started with
   time-period     ;; number of years from start
-  wood-volume     ;; overall wood production (m^3)
-  logging-period  ;; years
-  logging-volume  ;; m^3
 
-  tree-distance   ;; meters
   max-height      ;; meters
   π
   a
   c
+
+  ;; statistics
+  wood-volume            ;; overall wood production (m^3)
+  logging-volume         ;; m^3
 ]
 
 breed [trees tree]
@@ -30,17 +29,20 @@ to setup
   clear-all
 
   set wood-volume 0
-  set logging-period 10
 
-  set max-height 25.33
+  set max-height 40
   set π (1 + sqrt 5) / 2
-  set a 116
+  set a 160.94
   set c 390.43
 
-  set tree-distance 3
 
+  let world-size 25 / tree-distance
+  resize-world (- world-size) world-size (- world-size) world-size
+  set-patch-size 10 * tree-distance
   set-default-shape turtles "circle"
   ask patches [ set pcolor brown ] ;; brown background
+
+
   plant-trees
   draw-trees
   reset-ticks
@@ -85,9 +87,11 @@ end
 
 to grow-trees
   ask trees [
-    set age age + 1
-    set height height + height-growth
-    set diameter diameter + diameter-growth
+    if not dead? [
+      set age age + 1
+      set height height-growth
+      set diameter diameter + diameter-growth
+    ]
   ]
 end
 
@@ -104,8 +108,7 @@ end
 
 
 to plant-trees
-  let available-patches patches with [not any? turtles-here]
-  ask available-patches [
+  ask patches with [not any? turtles-here] [
       sprout-trees 1 [
         set age 0
         set diameter 0
@@ -122,60 +125,49 @@ end
 
 
 to-report height-growth
-  report 2 ;; TODO
+  ;; TODO
+  report max-height * (1 - exp(- a * diameter / max-height)) * exp(neighbor-crown-area / 2)
 end
 
 to-report diameter-growth
-  report 0.1 ;; TODO
+  let average-ring-size 0.0051
+  let a2 2
+  let b2 10
+  report a2 * exp(- b2 * neighbor-crown-area) * average-ring-size ;; TODO
 end
 
 ;; annual probability of mortality
 ;; https://www.cifor.org/publications/pdf_files/articles/ASunderland2003.pdf
 to-report tree-mortality-probability
-  let am 1000 ;; TODO
-  let pm 1 ;; TODO
-  report 0.1
-;  report 1 / (1 + am * pm * size-mortality * competition-mortality)
-end
+  let dead-neighbor 0
+  ask turtles-on neighbors [
+    if dead? [
+      set dead-neighbor dead-neighbor + 1
+    ]
+  ]
+  set dead-neighbor (dead-neighbor + 1) / 8
 
 
-;;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
-;to-report tree-height
-;  report a * exp(- a * diameter / max-height)
-;  ;; report max-height * (1 - exp(- a * diameter / max-height))
-;end
-;
-
-;
-;;; annual basal area growth
-;to-report tree-basal-area-growth
-;  let ag 1 ;; TODO
-;  let pg 1 ;; TODO
-;  report ag * pg * size-growth * competition-growth
-;end
-;
-;to-report size-growth
-;  report diameter^s1 * exp(- s2 * diameter)
-;  report 1 ;; TODO
-;end
-;
-to-report size-mortality
   let s1 1 ;; TODO
   let s2 1 ;; TODO
-  report (diameter ^ s1) * exp(- s2 * diameter)
-end
-;
-;to-report competition-growth
-;  report exp( - c1 * diameter^c2 * neighbor-basal-area)
-;  report 1 ;; TODO
-;end
-;
-to-report competition-mortality
+  let size-mortality (diameter ^ s1) * exp(- s2 * diameter)
+
   let c1 1 ;; TODO
   let c2 1 ;; TODO
-  report exp(- c1 * (diameter ^ c2) * neighbor-basal-area)
+  let competition-mortality exp(- c1 * (diameter ^ c2) * neighbor-crown-area)
+
+  let am 1000 ;; TODO
+  report 1 / (1 + am * size-mortality * competition-mortality * dead-neighbor)
 end
 
+
+
+
+;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
+;; projected crown area
+to-report tree-crown-area
+  report π * c / (4 * a) * diameter * height ;; TODO
+end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; YIELD MODELS
@@ -184,11 +176,6 @@ end
 ;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
 to-report tree-wood-volume
   report (π / 8) * (diameter ^ 2) * height
-end
-
-;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
-to-report tree-crown-diameter
-  report sqrt(c / (4 * a) * diameter * height) * 2
 end
 
 
@@ -207,29 +194,27 @@ to draw-trees
     ]
 
     ;; size
-    set size tree-crown-diameter / tree-distance
+    let crown-diameter sqrt(tree-crown-area / π) * 2
+    set size crown-diameter / tree-distance
   ]
 end
 
-;; cross-sectional area of all neighbor trees within radius  (m^2/ha)
-to-report neighbor-basal-area
-  let radius 10 ;; TODO
-  let basal-area-sum 0
-  ask trees [
-    let neighbors-basal-area-sum sum [(diameter ^ 2) / 4] of trees in-radius radius
-    set basal-area-sum basal-area-sum + neighbors-basal-area-sum
+to-report neighbor-crown-area
+  let crown-area-sum tree-crown-area
+  ask turtles-on neighbors [
+    set crown-area-sum crown-area-sum + tree-crown-area
   ]
-  report basal-area-sum / (radius ^ 2)
+  report crown-area-sum / (9 * (tree-distance ^ 2))
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
 294
 15
-1312
-1034
+788
+510
 -1
 -1
-10.0
+20.0
 1
 10
 1
@@ -239,10 +224,10 @@ GRAPHICS-WINDOW
 0
 0
 1
--50
-50
--50
-50
+-12
+12
+-12
+12
 1
 1
 1
@@ -250,10 +235,10 @@ years
 10.0
 
 BUTTON
-103
-260
-172
-296
+94
+188
+163
+224
 go
 go
 T
@@ -267,10 +252,10 @@ NIL
 0
 
 BUTTON
-20
-260
-90
-296
+11
+188
+81
+224
 setup
 setup
 NIL
@@ -292,35 +277,17 @@ rotation-age
 rotation-age
 1.0
 100.0
-80.0
+75.0
 1.0
 1
 years
 HORIZONTAL
 
 PLOT
-22
-400
-222
-550
-plot 1
-years
-volume
-0.0
-100.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -16777216 true "" "plot wood-volume"
-
-PLOT
-28
-603
-228
-753
+12
+292
+212
+442
 Logging volume
 years
 NIL
@@ -334,112 +301,84 @@ false
 PENS
 "default" 1.0 0 -16777216 true "" "plot logging-volume"
 
-SLIDER
-14
-80
-186
-113
-moisture
-moisture
+PLOT
+15
+461
+215
+611
+Average tree age
+years
+age
 0.0
-100.0
-50.0
-1.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot mean [age] of trees"
+
+PLOT
+18
+624
+249
+795
+Average tree wood volume
+years
+volume (m^3)
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot mean [tree-wood-volume] of trees"
+
+MONITOR
+13
+238
+142
+283
+Total wood volume
+wood-volume
+0
 1
-%
+11
+
+SLIDER
+10
+75
+200
+108
+tree-distance
+tree-distance
+1.0
+15.0
+2.0
+0.5
+1
+meters
+HORIZONTAL
+
+SLIDER
+10
+115
+187
+148
+logging-period
+logging-period
+1
+20
+10.0
+1
+1
+years
 HORIZONTAL
 
 @#$#@#$#@
-## WHAT IS IT?
-
-This project simulates the spread of a fire through a forest.  It shows that the fire's chance of reaching the right edge of the forest depends critically on the density of trees. This is an example of a common feature of complex systems, the presence of a non-linear threshold or critical parameter.
-
-## HOW IT WORKS
-
-The fire starts on the left edge of the forest, and spreads to neighboring trees. The fire spreads in four directions: north, east, south, and west.
-
-The model assumes there is no wind.  So, the fire must have trees along its path in order to advance.  That is, the fire cannot skip over an unwooded area (patch), so such a patch blocks the fire's motion in that direction.
-
-## HOW TO USE IT
-
-Click the SETUP button to set up the trees (green) and fire (red on the left-hand side).
-
-Click the GO button to start the simulation.
-
-The DENSITY slider controls the density of trees in the forest. (Note: Changes in the DENSITY slider do not take effect until the next SETUP.)
-
-## THINGS TO NOTICE
-
-When you run the model, how much of the forest burns. If you run it again with the same settings, do the same trees burn? How similar is the burn from run to run?
-
-Each turtle that represents a piece of the fire is born and then dies without ever moving. If the fire is made of turtles but no turtles are moving, what does it mean to say that the fire moves? This is an example of different levels in a system: at the level of the individual turtles, there is no motion, but at the level of the turtles collectively over time, the fire moves.
-
-## THINGS TO TRY
-
-Set the density of trees to 55%. At this setting, there is virtually no chance that the fire will reach the right edge of the forest. Set the density of trees to 70%. At this setting, it is almost certain that the fire will reach the right edge. There is a sharp transition around 59% density. At 59% density, the fire has a 50/50 chance of reaching the right edge.
-
-Try setting up and running a BehaviorSpace experiment (see Tools menu) to analyze the percent burned at different tree density levels. Plot the burn-percentage against the density. What kind of curve do you get?
-
-Try changing the size of the lattice (`max-pxcor` and `max-pycor` in the Model Settings). Does it change the burn behavior of the fire?
-
-## EXTENDING THE MODEL
-
-What if the fire could spread in eight directions (including diagonals)? To do that, use `neighbors` instead of `neighbors4`. How would that change the fire's chances of reaching the right edge? In this model, what "critical density" of trees is needed for the fire to propagate?
-
-Add wind to the model so that the fire can "jump" greater distances in certain directions.
-
-Add the ability to plant trees where you want them. What configurations of trees allow the fire to cross the forest? Which don't? Why is over 59% density likely to result in a tree configuration that works? Why does the likelihood of such a configuration increase so rapidly at the 59% density?
-
-The physicist Per Bak asked why we frequently see systems undergoing critical changes. He answers this by proposing the concept of [self-organzing criticality] (https://en.wikipedia.org/wiki/Self-organized_criticality) (SOC). Can you create a version of the fire model that exhibits SOC?
-
-## NETLOGO FEATURES
-
-Unburned trees are represented by green patches; burning trees are represented by turtles.  Two breeds of turtles are used, "fires" and "embers".  When a tree catches fire, a new fire turtle is created; a fire turns into an ember on the next turn.  Notice how the program gradually darkens the color of embers to achieve the visual effect of burning out.
-
-The `neighbors4` primitive is used to spread the fire.
-
-You could also write the model without turtles by just having the patches spread the fire, and doing it that way makes the code a little simpler.   Written that way, the model would run much slower, since all of the patches would always be active.  By using turtles, it's much easier to restrict the model's activity to just the area around the leading edge of the fire.
-
-See the "CA 1D Rule 30" and "CA 1D Rule 30 Turtle" for an example of a model written both with and without turtles.
-
-## RELATED MODELS
-
-* Percolation
-* Rumor Mill
-
-## CREDITS AND REFERENCES
-
-https://en.wikipedia.org/wiki/Forest-fire_model
-
-## HOW TO CITE
-
-If you mention this model or the NetLogo software in a publication, we ask that you include the citations below.
-
-For the model itself:
-
-* Wilensky, U. (1997).  NetLogo Fire model.  http://ccl.northwestern.edu/netlogo/models/Fire.  Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
-
-Please cite the NetLogo software as:
-
-* Wilensky, U. (1999). NetLogo. http://ccl.northwestern.edu/netlogo/. Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
-
-## COPYRIGHT AND LICENSE
-
-Copyright 1997 Uri Wilensky.
-
-![CC BY-NC-SA 3.0](http://ccl.northwestern.edu/images/creativecommons/byncsa.png)
-
-This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 License.  To view a copy of this license, visit https://creativecommons.org/licenses/by-nc-sa/3.0/ or send a letter to Creative Commons, 559 Nathan Abbott Way, Stanford, California 94305, USA.
-
-Commercial licenses are also available. To inquire about commercial licenses, please contact Uri Wilensky at uri@northwestern.edu.
-
-This model was created as part of the project: CONNECTED MATHEMATICS: MAKING SENSE OF COMPLEX PHENOMENA THROUGH BUILDING OBJECT-BASED PARALLEL MODELS (OBPML).  The project gratefully acknowledges the support of the National Science Foundation (Applications of Advanced Technologies Program) -- grant numbers RED #9552950 and REC #9632612.
-
-This model was developed at the MIT Media Lab using CM StarLogo.  See Resnick, M. (1994) "Turtles, Termites and Traffic Jams: Explorations in Massively Parallel Microworlds."  Cambridge, MA: MIT Press.  Adapted to StarLogoT, 1997, as part of the Connected Mathematics Project.
-
-This model was converted to NetLogo as part of the projects: PARTICIPATORY SIMULATIONS: NETWORK-BASED DESIGN FOR SYSTEMS LEARNING IN CLASSROOMS and/or INTEGRATED SIMULATION AND MODELING ENVIRONMENT. The project gratefully acknowledges the support of the National Science Foundation (REPP & ROLE programs) -- grant numbers REC #9814682 and REC-0126227. Converted from StarLogoT to NetLogo, 2001.
-
-<!-- 1997 2001 MIT -->
 @#$#@#$#@
 default
 true
