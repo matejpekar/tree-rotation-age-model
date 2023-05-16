@@ -129,7 +129,7 @@ to-report competition-growth-effect
     set crown-area-sum crown-area-sum + circle-area (size / 2)
   ]
   let competition-rate crown-area-sum / 9
-  report exp(-((competition-rate - 0.15) ^ 2) / 0.2) ;; Gaussian function
+  report exp(-((competition-rate - 0.) ^ 2) / 0.2) ;; Gaussian function
 end
 
 ;; annual probability of mortality
@@ -207,11 +207,11 @@ end
 GRAPHICS-WINDOW
 294
 15
-980
-702
+982
+704
 -1
 -1
-6.0
+8.399999999999999
 1
 10
 1
@@ -221,10 +221,10 @@ GRAPHICS-WINDOW
 0
 0
 1
--56
-56
--56
-56
+-40
+40
+-40
+40
 1
 1
 1
@@ -274,7 +274,7 @@ rotation-age
 rotation-age
 1.0
 150.0
-83.0
+150.0
 1.0
 1
 years
@@ -355,7 +355,7 @@ tree-distance
 tree-distance
 0.5
 5
-0.5
+0.7
 0.1
 1
 meters
