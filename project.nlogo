@@ -1,6 +1,11 @@
 globals [
   ;; constants
   π
+  eps
+  tan-30
+  max-height
+
+  density
 
   ;; statistics
   wood-volume            ;; overall wood production (m^3)
@@ -24,14 +29,27 @@ trees-own [
 to setup
   clear-all
 
-  set wood-volume 0
   set π (1 + sqrt 5) / 2
+  set eps 0.000001
+  set tan-30 (sqrt 3) / 3
+  set max-height 40
 
-  let world-size 28 / tree-distance
-  resize-world (- world-size) world-size (- world-size) world-size
-  set-patch-size 12 * tree-distance
+
+  ; Set the size of each patch to represent 1 square meter
+  let patch-size-meters tree-distance
+  ; Calculate the number of patches in each dimension for 1 ha
+  let area 10000 ;; m2
+  let num-patches round(sqrt (area) / patch-size-meters) - 1
+  resize-world 0 num-patches 0 num-patches
+
+  ;; visuals
+  set-patch-size 7 * tree-distance ;; the visual size of the patches
   set-default-shape turtles "circle"
   ask patches [ set pcolor brown ] ;; brown background
+
+
+  set wood-volume 0
+  set density (count patches) / area
 
   plant-trees
   draw-trees
@@ -44,7 +62,7 @@ end
 
 to go
   grow-trees
-  ask trees [
+  ask trees with [not dead?] [
     if random-float 1.0 < tree-mortality-probability [
       set dead? true
     ]
@@ -56,8 +74,7 @@ to go
   ]
 
   draw-trees
-
-;  print [neighbor-crown-area] of one-of trees
+;  print [stand-basal-area] of one-of trees
   tick
 end
 
@@ -67,9 +84,6 @@ to grow-trees
       set age age + 1
       set height height + height-growth
       set diameter diameter + diameter-growth
-
-      let crown-diameter sqrt(tree-crown-area / π) * 2
-      set size crown-diameter / tree-distance
     ]
   ]
 end
@@ -92,7 +106,6 @@ to plant-trees
         set age 0
         set diameter 0
         set height 0
-        set size 0
         set dead? false
       ]
     ]
@@ -104,14 +117,13 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report height-growth
-  let K 40.6417080
-  let N 5.3923839
+  let K 40.641708
   let r 0.0488635
 
-  let heigth-at-age K * N / ((K - N) * exp(- r * age) + N)
+  let heigth-at-age optimal-heigth-at-age
   let height-growth-potential heigth-at-age * r * (1 - heigth-at-age / K)
 
-  report height-growth-potential * competition-growth-effect
+  report height-growth-potential * competition-height-growth-effect
 end
 
 to-report diameter-growth
@@ -119,18 +131,24 @@ to-report diameter-growth
   let average-ring-size 0.0025 ;; meters
   let diameter-growth-potential 2 * average-ring-size
 
-  report diameter-growth-potential * competition-growth-effect
+  report diameter-growth-potential * competition-width-growth-effect
 end
 
 
-to-report competition-growth-effect
-  let crown-area-sum circle-area (size / 2)
-  ask turtles-on neighbors [
-    set crown-area-sum crown-area-sum + circle-area (size / 2)
-  ]
-  let competition-rate crown-area-sum / 9
-  report exp(-((competition-rate - 0.15) ^ 2) / 0.2) ;; Gaussian function
+to-report optimal-heigth-at-age
+  let K 40.641708
+  let N 5.3923839
+  let r 0.0488635
+  report K * N / ((K - N) * exp(- r * age) + N)
 end
+
+to-report optimal-diameter-at-age
+  report 2 * 0.0025 * age
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; MORTALITY MODELS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; annual probability of mortality
 ;; https://www.cifor.org/publications/pdf_files/articles/ASunderland2003.pdf
@@ -139,27 +157,62 @@ to-report tree-mortality-probability
   let neighbor-mortality-percentage count (turtles-on neighbors) with [dead?] / 8
 
 
-  let s1 1 ;; TODO
-  let s2 1 ;; TODO
-  let size-mortality (diameter ^ s1) * exp(- s2 * diameter)
+  let size-mortality ln (0.01 * (height - optimal-heigth-at-age) ^ 2 + (diameter - optimal-diameter-at-age) ^ 2 + 1)
+
+;  let s1 1 ;; TODO
+;  let s2 1 ;; TODO
+;  let size-mortality (diameter ^ s1) * exp(- s2 * diameter)
 
 ;  let c1 1 ;; TODO
 ;  let c2 1 ;; TODO
-;  let competition-mortality exp(- c1 * (diameter ^ c2) * neighbor-crown-area)
+;;  let competition-mortality exp(- c1 * (diameter ^ c2) * neighbor-crown-area)
+;
+;  let am 1000 ;; TODO
+;  report 1 / (1 + am * size-mortality * neighbor-mortality-percentage) ;; competition-mortality
 
-  let am 1000 ;; TODO
-  report 1 / (1 + am * size-mortality * neighbor-mortality-percentage) ;; competition-mortality
+;  report 1 / (1 + exp(-(4.6 + neighbor-mortality-percentage + size-mortality)))
+  report 0.01
 end
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; COMPETITION MODELS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report tree-basal-area
+  report circle-area (diameter / 2)
+end
+
+to-report stand-basal-area [radius]
+;  let basal-area sum [tree-basal-area] of trees in-radius (radius / tree-distance)
+;  report basal-area
+
+  let mean-basal-area mean [tree-basal-area] of turtles-on neighbors
+  report mean-basal-area * density * (circle-area radius)
+end
+
+;to-report competition-growth-effect
+;;  let crown-area-sum circle-area (size / 2)
+;;  ask turtles-on neighbors [
+;;    set crown-area-sum crown-area-sum + circle-area (size / 2)
+;;  ]
+;;  let competition-rate crown-area-sum / 9
+;
+;  let competition-rate stand-basal-area
+;  report exp(-((competition-rate - 0.15) ^ 2) / 0.2) ;; Gaussian function
+;end
 
 
-;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
-;; projected crown area
-to-report tree-crown-area
-  let a 140.94
-  let c 390.43
-  report π * c / (4 * a) * diameter * height ;; TODO
+to-report competition-height-growth-effect
+  report competition-growth-effect (stand-basal-area ((max-height - height)  * tan-30))
+end
+
+to-report competition-width-growth-effect
+  report competition-growth-effect (stand-basal-area (max-height * tan-30))
+end
+
+to-report competition-growth-effect [competition-rate]
+  report exp(-((competition-rate - 0.15) ^ 2) / 0.2) ;; Gaussian function
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -183,22 +236,19 @@ to draw-trees
     ] [
       set color scale-color green age rotation-age 0 ; map the age to a green color
     ]
+
+    let crown-diameter sqrt(tree-crown-area / π) * 2
+    set size crown-diameter
   ]
 end
 
-
-to-report tree-basal-area
-  report π * (diameter / 2) ^ 2
+;; projected crown area
+;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
+to-report tree-crown-area
+  let a 150
+  let c 390.43
+  report π * c / (4 * a) * diameter * height
 end
-
-to-report stand-basal-area
-  let basal-area tree-basal-area
-  ask turtles-on neighbors [
-    set basal-area basal-area + tree-basal-area
-  ]
-  report basal-area / (9 * (tree-distance ^ 2))
-end
-
 
 to-report circle-area [radius]
   report π * (radius ^ 2)
@@ -207,24 +257,24 @@ end
 GRAPHICS-WINDOW
 294
 15
-980
-702
+1007
+729
 -1
 -1
-6.0
+12.6
 1
 10
 1
 1
 1
 0
-0
-0
 1
--56
-56
--56
-56
+1
+1
+0
+55
+0
+55
 1
 1
 1
@@ -355,7 +405,7 @@ tree-distance
 tree-distance
 0.5
 5
-0.5
+1.8
 0.1
 1
 meters
@@ -423,7 +473,7 @@ max-logging-percentage
 max-logging-percentage
 0.0
 100.0
-49.0
+100.0
 1.0
 1
 %
