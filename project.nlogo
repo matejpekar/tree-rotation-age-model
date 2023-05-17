@@ -3,13 +3,17 @@ globals [
   π
   eps
   tan-30
-  max-height
 
+  ;; variables
+  max-height
+  logging-period
+  max-logging-percentage
   density
 
   ;; statistics
-  wood-volume            ;; overall wood production (m^3)
   logging-volume         ;; m^3
+  profit
+  average-tree-profit
 ]
 
 breed [trees tree]
@@ -32,13 +36,12 @@ to setup
   set π (1 + sqrt 5) / 2
   set eps 0.000001
   set tan-30 (sqrt 3) / 3
-  set max-height 40
 
 
   ; Set the size of each patch to represent 1 square meter
   let patch-size-meters tree-distance
   ; Calculate the number of patches in each dimension for 1 ha
-  let area 10000 ;; m2
+  let area 2500 ;; m2
   let num-patches round(sqrt (area) / patch-size-meters) - 1
   resize-world 0 num-patches 0 num-patches
 
@@ -48,7 +51,9 @@ to setup
   ask patches [ set pcolor brown ] ;; brown background
 
 
-  set wood-volume 0
+  set max-height 40
+  set logging-period 10
+  set max-logging-percentage 0.33
   set density (count patches) / area
 
   plant-trees
@@ -74,7 +79,7 @@ to go
   ]
 
   draw-trees
-;  print [stand-basal-area] of one-of trees
+;  print [stand-basal-area (max-height * tan-30)] of one-of trees
   tick
 end
 
@@ -88,27 +93,46 @@ to grow-trees
   ]
 end
 
-to logging
-  let max-trees-to-cut round (max-logging-percentage * (count trees) / 100)
-  let eligible-trees trees with [(age >= rotation-age) or dead?]
-
-  set logging-volume 0
-  ask up-to-n-of max-trees-to-cut eligible-trees [
-    set logging-volume logging-volume + tree-wood-volume
-    die
-  ]
-  set wood-volume wood-volume + logging-volume
+to chop-tree
+  set logging-volume logging-volume + tree-wood-volume
+  set profit profit - height * logging-cost
+  die
 end
 
+to logging
+  let chopped-trees 0
+  let max-trees-to-cut round (max-logging-percentage * (count trees))
+
+  let dead-trees trees with [dead?]
+  let mature-trees trees with [age >= rotation-age]
+
+  set logging-volume 0
+  ;; first dead trees
+  ask up-to-n-of max-trees-to-cut dead-trees [
+    set chopped-trees chopped-trees + 1
+    chop-tree
+  ]
+  ;; mature trees
+  ask up-to-n-of (max-trees-to-cut - count dead-trees) mature-trees [
+    set chopped-trees chopped-trees + 1
+    chop-tree
+  ]
+
+  set profit logging-volume * wood-price - chopped-trees * seedling-price
+  set average-tree-profit profit / chopped-trees
+end
+
+
+;; https://www.pavelburda.cz/wp-content/uploads/2023/01/sazenice-jaro-2023.pdf
 to plant-trees
   ask patches with [not any? turtles-here] [
       sprout-trees 1 [
         set age 0
-        set diameter 0
-        set height 0
+        set diameter 0.005
+        set height 0.3
         set dead? false
       ]
-    ]
+   ]
 end
 
 
@@ -116,6 +140,7 @@ end
 ;; GROWTH MODELS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; https://user.mendelu.cz/drapela/Dendrometrie/Lesnicke_tabulky/Taxacni%20tabulky/smrk.jpg
 to-report height-growth
   let K 40.641708
   let r 0.0488635
@@ -131,7 +156,7 @@ to-report diameter-growth
   let average-ring-size 0.0025 ;; meters
   let diameter-growth-potential 2 * average-ring-size
 
-  report diameter-growth-potential * competition-width-growth-effect
+  report diameter-growth-potential * competition-diameter-growth-effect
 end
 
 
@@ -184,35 +209,20 @@ to-report tree-basal-area
 end
 
 to-report stand-basal-area [radius]
-;  let basal-area sum [tree-basal-area] of trees in-radius (radius / tree-distance)
-;  report basal-area
-
   let mean-basal-area mean [tree-basal-area] of turtles-on neighbors
   report mean-basal-area * density * (circle-area radius)
 end
-
-;to-report competition-growth-effect
-;;  let crown-area-sum circle-area (size / 2)
-;;  ask turtles-on neighbors [
-;;    set crown-area-sum crown-area-sum + circle-area (size / 2)
-;;  ]
-;;  let competition-rate crown-area-sum / 9
-;
-;  let competition-rate stand-basal-area
-;  report exp(-((competition-rate - 0.15) ^ 2) / 0.2) ;; Gaussian function
-;end
-
 
 to-report competition-height-growth-effect
   report competition-growth-effect (stand-basal-area ((max-height - height)  * tan-30))
 end
 
-to-report competition-width-growth-effect
+to-report competition-diameter-growth-effect
   report competition-growth-effect (stand-basal-area (max-height * tan-30))
 end
 
 to-report competition-growth-effect [competition-rate]
-  report exp(-((competition-rate - 0.15) ^ 2) / 0.2) ;; Gaussian function
+  report exp(- ((competition-rate - 0.5) ^ 2)) ;; Gaussian function
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -245,9 +255,7 @@ end
 ;; projected crown area
 ;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
 to-report tree-crown-area
-  let a 150
-  let c 390.43
-  report π * c / (4 * a) * diameter * height
+  report 0.1 * π * diameter * height
 end
 
 to-report circle-area [radius]
@@ -255,13 +263,13 @@ to-report circle-area [radius]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-294
-15
-1007
-729
+224
+17
+533
+327
 -1
 -1
-12.6
+10.5
 1
 10
 1
@@ -272,9 +280,9 @@ GRAPHICS-WINDOW
 1
 1
 0
-55
+32
 0
-55
+32
 1
 1
 1
@@ -282,10 +290,10 @@ years
 10.0
 
 BUTTON
-90
-669
-159
-705
+92
+369
+161
+405
 go
 go
 T
@@ -299,10 +307,10 @@ NIL
 0
 
 BUTTON
-7
-669
-77
-705
+9
+369
+79
+405
 setup
 setup
 NIL
@@ -324,17 +332,17 @@ rotation-age
 rotation-age
 1.0
 150.0
-83.0
+129.0
 1.0
 1
 years
 HORIZONTAL
 
 PLOT
-1604
-253
-1804
-403
+1070
+46
+1270
+196
 Logging volume
 years
 NIL
@@ -349,10 +357,10 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot logging-volume"
 
 PLOT
-1180
-411
-1477
-570
+721
+404
+1018
+563
 Tree age
 years
 age
@@ -368,10 +376,10 @@ PENS
 "max" 1.0 0 -2674135 true "" "plot max [age] of trees"
 
 PLOT
-1601
-435
-1832
-606
+1067
+228
+1298
+399
 Average tree wood volume
 years
 volume (m^3)
@@ -385,52 +393,26 @@ false
 PENS
 "default" 1.0 0 -16777216 true "" "plot mean [tree-wood-volume] of trees"
 
-MONITOR
-1605
-199
-1734
-244
-Total wood volume
-wood-volume
-0
-1
-11
-
 SLIDER
-10
-75
-200
-108
+14
+71
+186
+104
 tree-distance
 tree-distance
 0.5
 5
-1.8
+1.5
 0.1
 1
 meters
 HORIZONTAL
 
-SLIDER
-10
-115
-187
-148
-logging-period
-logging-period
-1
-20
-10.0
-1
-1
-years
-HORIZONTAL
-
 PLOT
-1176
-51
-1481
-206
+717
+44
+1022
+199
 Tree diameter
 years
 cm
@@ -446,10 +428,10 @@ PENS
 "max" 1.0 0 -2674135 true "" "plot max [diameter * 100] of trees"
 
 PLOT
-1179
-227
-1475
-390
+720
+220
+1016
+383
 Tree hight
 years
 m
@@ -464,20 +446,74 @@ PENS
 "mean" 1.0 0 -16777216 true "" "plot mean [height] of trees"
 "max" 1.0 0 -2674135 true "" "plot max [height] of trees"
 
-SLIDER
-8
-164
-229
-197
-max-logging-percentage
-max-logging-percentage
-0.0
-100.0
-100.0
-1.0
+INPUTBOX
+12
+136
+161
+196
+wood-price
+500.0
 1
-%
-HORIZONTAL
+0
+Number
+
+INPUTBOX
+10
+205
+159
+265
+seedling-price
+10.0
+1
+0
+Number
+
+PLOT
+1033
+408
+1250
+568
+Profit
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot profit"
+
+INPUTBOX
+11
+277
+160
+337
+logging-cost
+50.0
+1
+0
+Number
+
+PLOT
+1263
+414
+1463
+564
+Average profit per tree
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot average-tree-profit"
 
 @#$#@#$#@
 @#$#@#$#@
