@@ -8,7 +8,6 @@ globals [
   max-height
   logging-period
   max-logging-percentage
-  density
 
   ;; statistics
   logging-volume         ;; m^3
@@ -46,7 +45,7 @@ to setup
   resize-world 0 num-patches 0 num-patches
 
   ;; visuals
-  set-patch-size 7 * tree-distance ;; the visual size of the patches
+  set-patch-size 20 * tree-distance ;; the visual size of the patches
   set-default-shape turtles "circle"
   ask patches [ set pcolor brown ] ;; brown background
 
@@ -54,7 +53,6 @@ to setup
   set max-height 40
   set logging-period 10
   set max-logging-percentage 0.33
-  set density (count patches) / area
 
   plant-trees
   draw-trees
@@ -80,6 +78,8 @@ to go
 
   draw-trees
 ;  print [stand-basal-area (max-height * tan-30)] of one-of trees
+;  (stand-basal-area ((max-height - height)  * tan-30))
+;  print mean [stand-basal-area ((max-height - height)  * tan-30)] of trees
   tick
 end
 
@@ -95,7 +95,10 @@ end
 
 to chop-tree
   set logging-volume logging-volume + tree-wood-volume
-  set profit profit - height * logging-cost
+  set profit profit - (height * logging-cost)
+  if diameter >= 0.1 [
+    set profit profit + (tree-wood-volume * wood-price)
+  ]
   die
 end
 
@@ -103,23 +106,29 @@ to logging
   let chopped-trees 0
   let max-trees-to-cut round (max-logging-percentage * (count trees))
 
-  let dead-trees trees with [dead?]
-  let mature-trees trees with [age >= rotation-age]
-
   set logging-volume 0
+  set profit 0
+
   ;; first dead trees
+  let dead-trees trees with [dead?]
   ask up-to-n-of max-trees-to-cut dead-trees [
     set chopped-trees chopped-trees + 1
     chop-tree
   ]
-  ;; mature trees
-  ask up-to-n-of (max-trees-to-cut - count dead-trees) mature-trees [
-    set chopped-trees chopped-trees + 1
-    chop-tree
+
+  if max-trees-to-cut - count dead-trees > 0 [
+    ;; mature trees
+    let mature-trees trees with [age >= rotation-age and not dead?]
+    ask up-to-n-of (max-trees-to-cut - count dead-trees) mature-trees [
+      set chopped-trees chopped-trees + 1
+      chop-tree
+    ]
   ]
 
-  set profit logging-volume * wood-price - chopped-trees * seedling-price
-  set average-tree-profit profit / chopped-trees
+;  set profit logging-volume * wood-price - chopped-trees * seedling-price
+  if profit != 0 [
+    set average-tree-profit profit / chopped-trees - seedling-price
+  ]
 end
 
 
@@ -127,10 +136,11 @@ end
 to plant-trees
   ask patches with [not any? turtles-here] [
       sprout-trees 1 [
-        set age 0
+        set age 3
         set diameter 0.005
-        set height 0.3
+        set height 0.26 + random-float 0.09
         set dead? false
+        set profit profit - seedling-price
       ]
    ]
 end
@@ -143,9 +153,10 @@ end
 ;; https://user.mendelu.cz/drapela/Dendrometrie/Lesnicke_tabulky/Taxacni%20tabulky/smrk.jpg
 to-report height-growth
   let K 40.641708
+  let N 5.3923839
   let r 0.0488635
 
-  let heigth-at-age optimal-heigth-at-age
+  let heigth-at-age K * N / ((K - N) * exp(- r * age) + N)
   let height-growth-potential heigth-at-age * r * (1 - heigth-at-age / K)
 
   report height-growth-potential * competition-height-growth-effect
@@ -159,18 +170,6 @@ to-report diameter-growth
   report diameter-growth-potential * competition-diameter-growth-effect
 end
 
-
-to-report optimal-heigth-at-age
-  let K 40.641708
-  let N 5.3923839
-  let r 0.0488635
-  report K * N / ((K - N) * exp(- r * age) + N)
-end
-
-to-report optimal-diameter-at-age
-  report 2 * 0.0025 * age
-end
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; MORTALITY MODELS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -181,22 +180,9 @@ end
 to-report tree-mortality-probability
   let neighbor-mortality-percentage count (turtles-on neighbors) with [dead?] / 8
 
-
-  let size-mortality ln (0.01 * (height - optimal-heigth-at-age) ^ 2 + (diameter - optimal-diameter-at-age) ^ 2 + 1)
-
-;  let s1 1 ;; TODO
-;  let s2 1 ;; TODO
-;  let size-mortality (diameter ^ s1) * exp(- s2 * diameter)
-
-;  let c1 1 ;; TODO
-;  let c2 1 ;; TODO
-;;  let competition-mortality exp(- c1 * (diameter ^ c2) * neighbor-crown-area)
-;
-;  let am 1000 ;; TODO
-;  report 1 / (1 + am * size-mortality * neighbor-mortality-percentage) ;; competition-mortality
-
-;  report 1 / (1 + exp(-(4.6 + neighbor-mortality-percentage + size-mortality)))
-  report 0.01
+  let competition-mortality exp(0.05 * neighbor-mortality-percentage) - 1
+  let size-mortality exp(0.05 * diameter) - 1
+  report 0.01 + competition-mortality + size-mortality
 end
 
 
@@ -209,21 +195,21 @@ to-report tree-basal-area
 end
 
 to-report stand-basal-area [radius]
-  let mean-basal-area mean [tree-basal-area] of turtles-on neighbors
-  report mean-basal-area * density * (circle-area radius)
+  report sum [tree-basal-area] of trees in-radius (radius / tree-distance)
 end
 
 to-report competition-height-growth-effect
-  report competition-growth-effect (stand-basal-area ((max-height - height)  * tan-30))
+  report gaussian-function (stand-basal-area ((max-height - height)  * tan-30)) 1.2 1
 end
 
 to-report competition-diameter-growth-effect
-  report competition-growth-effect (stand-basal-area (max-height * tan-30))
+  report gaussian-function (stand-basal-area (max-height * tan-30)) 0 1.5
 end
 
-to-report competition-growth-effect [competition-rate]
-  report exp(- ((competition-rate - 0.5) ^ 2)) ;; Gaussian function
+to-report gaussian-function [x m w]
+  report exp(- (((x - m) ^ 2) / w)) ;; Gaussian function
 end
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; YIELD MODELS
@@ -255,7 +241,7 @@ end
 ;; projected crown area
 ;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
 to-report tree-crown-area
-  report 0.1 * π * diameter * height
+  report 0.5 * π * diameter * height
 end
 
 to-report circle-area [radius]
@@ -265,11 +251,11 @@ end
 GRAPHICS-WINDOW
 224
 17
-533
-327
+644
+438
 -1
 -1
-10.5
+40.0
 1
 10
 1
@@ -280,9 +266,9 @@ GRAPHICS-WINDOW
 1
 1
 0
-32
+24
 0
-32
+24
 1
 1
 1
@@ -332,7 +318,7 @@ rotation-age
 rotation-age
 1.0
 150.0
-129.0
+150.0
 1.0
 1
 years
@@ -400,9 +386,9 @@ SLIDER
 104
 tree-distance
 tree-distance
-0.5
+1
 5
-1.5
+2.0
 0.1
 1
 meters
@@ -492,7 +478,7 @@ INPUTBOX
 160
 337
 logging-cost
-50.0
+0.0
 1
 0
 Number
@@ -513,7 +499,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot average-tree-profit"
+"default" 10.0 0 -16777216 true "" "if ticks mod logging-period = 0 [\nplot average-tree-profit\n]"
 
 @#$#@#$#@
 @#$#@#$#@
@@ -806,6 +792,36 @@ setup
 repeat 180 [ go ]
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="experiment" repetitions="2" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <exitCondition>ticks &gt; 5000</exitCondition>
+    <metric>profit</metric>
+    <metric>average-tree-profit</metric>
+    <enumeratedValueSet variable="rotation-age">
+      <value value="129"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="tree-distance">
+      <value value="0.5"/>
+      <value value="1"/>
+      <value value="1.5"/>
+      <value value="2"/>
+      <value value="2.5"/>
+      <value value="3.5"/>
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="logging-cost">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wood-price">
+      <value value="500"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="seedling-price">
+      <value value="10"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
