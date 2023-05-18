@@ -11,6 +11,9 @@ globals [
 
   ;; statistics
   logging-volume         ;; m^3
+  logging-percentage
+  logging-dead
+  logging-unsuitable
   profit
   average-tree-profit
 ]
@@ -40,12 +43,12 @@ to setup
   ; Set the size of each patch to represent 1 square meter
   let patch-size-meters tree-distance
   ; Calculate the number of patches in each dimension for 1 ha
-  let area 2500 ;; m2
+  let area 625 ;; m2
   let num-patches round(sqrt (area) / patch-size-meters) - 1
   resize-world 0 num-patches 0 num-patches
 
   ;; visuals
-  set-patch-size 20 * tree-distance ;; the visual size of the patches
+  set-patch-size 8 * tree-distance ;; the visual size of the patches
   set-default-shape turtles "circle"
   ask patches [ set pcolor brown ] ;; brown background
 
@@ -96,8 +99,10 @@ end
 to chop-tree
   set logging-volume logging-volume + tree-wood-volume
   set profit profit - (height * logging-cost)
-  if diameter >= 0.1 [
+  ifelse diameter >= 0.1 [
     set profit profit + (tree-wood-volume * wood-price)
+  ] [
+    set logging-unsuitable logging-unsuitable + 1
   ]
   die
 end
@@ -109,10 +114,14 @@ to logging
   set logging-volume 0
   set profit 0
 
+  set logging-dead 0
+  set logging-unsuitable 0
+
   ;; first dead trees
   let dead-trees trees with [dead?]
   ask up-to-n-of max-trees-to-cut dead-trees [
     set chopped-trees chopped-trees + 1
+    set logging-dead logging-dead + 1
     chop-tree
   ]
 
@@ -125,9 +134,12 @@ to logging
     ]
   ]
 
-;  set profit logging-volume * wood-price - chopped-trees * seedling-price
-  if profit != 0 [
+
+  set logging-percentage chopped-trees / (count patches)
+  if chopped-trees != 0 [
     set average-tree-profit profit / chopped-trees - seedling-price
+    set logging-dead logging-dead / chopped-trees
+    set logging-unsuitable logging-unsuitable / chopped-trees
   ]
 end
 
@@ -180,9 +192,9 @@ end
 to-report tree-mortality-probability
   let neighbor-mortality-percentage count (turtles-on neighbors) with [dead?] / 8
 
-  let competition-mortality exp(0.05 * neighbor-mortality-percentage) - 1
-  let size-mortality exp(0.05 * diameter) - 1
-  report 0.01 + competition-mortality + size-mortality
+  let competition-mortality exp(0.01 * neighbor-mortality-percentage) - 1
+  let size-mortality 1 - gaussian-function diameter 0.25 2
+  report competition-mortality + size-mortality
 end
 
 
@@ -251,11 +263,11 @@ end
 GRAPHICS-WINDOW
 224
 17
-644
-438
+424
+218
 -1
 -1
-40.0
+32.0
 1
 10
 1
@@ -266,9 +278,9 @@ GRAPHICS-WINDOW
 1
 1
 0
-24
+5
 0
-24
+5
 1
 1
 1
@@ -388,7 +400,7 @@ tree-distance
 tree-distance
 1
 5
-2.0
+4.0
 0.1
 1
 meters
@@ -793,22 +805,63 @@ repeat 180 [ go ]
 @#$#@#$#@
 @#$#@#$#@
 <experiments>
-  <experiment name="experiment" repetitions="2" runMetricsEveryStep="true">
+  <experiment name="experiment" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
-    <exitCondition>ticks &gt; 5000</exitCondition>
+    <timeLimit steps="5000"/>
     <metric>profit</metric>
     <metric>average-tree-profit</metric>
     <enumeratedValueSet variable="rotation-age">
-      <value value="129"/>
+      <value value="30"/>
+      <value value="50"/>
+      <value value="80"/>
+      <value value="110"/>
+      <value value="130"/>
+      <value value="150"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="tree-distance">
-      <value value="0.5"/>
       <value value="1"/>
-      <value value="1.5"/>
       <value value="2"/>
-      <value value="2.5"/>
-      <value value="3.5"/>
+      <value value="3"/>
+      <value value="4"/>
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="logging-cost">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wood-price">
+      <value value="500"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="seedling-price">
+      <value value="10"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="experiment" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="5000"/>
+    <metric>profit</metric>
+    <metric>average-tree-profit</metric>
+    <metric>logging-percentage</metric>
+    <metric>logging-dead</metric>
+    <metric>logging-unsuitable</metric>
+    <metric>mean [age] of trees</metric>
+    <metric>max [age] of trees</metric>
+    <metric>mean [diameter] of trees</metric>
+    <metric>max [diameter] of trees</metric>
+    <metric>mean [height] of trees</metric>
+    <metric>max [height] of trees</metric>
+    <enumeratedValueSet variable="rotation-age">
+      <value value="30"/>
+      <value value="60"/>
+      <value value="90"/>
+      <value value="120"/>
+      <value value="150"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="tree-distance">
+      <value value="2"/>
+      <value value="3"/>
+      <value value="4"/>
       <value value="5"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="logging-cost">
