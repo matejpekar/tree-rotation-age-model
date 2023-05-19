@@ -43,12 +43,12 @@ to setup
   ; Set the size of each patch to represent 1 square meter
   let patch-size-meters tree-distance
   ; Calculate the number of patches in each dimension for 1 ha
-  let area 625 ;; m2
+  let area 900 ;; m2
   let num-patches round(sqrt (area) / patch-size-meters) - 1
   resize-world 0 num-patches 0 num-patches
 
   ;; visuals
-  set-patch-size 8 * tree-distance ;; the visual size of the patches
+  set-patch-size 18 * tree-distance ;; the visual size of the patches
   set-default-shape turtles "circle"
   ask patches [ set pcolor brown ] ;; brown background
 
@@ -81,8 +81,6 @@ to go
 
   draw-trees
 ;  print [stand-basal-area (max-height * tan-30)] of one-of trees
-;  (stand-basal-area ((max-height - height)  * tan-30))
-;  print mean [stand-basal-area ((max-height - height)  * tan-30)] of trees
   tick
 end
 
@@ -98,7 +96,6 @@ end
 
 to chop-tree
   set logging-volume logging-volume + tree-wood-volume
-  set profit profit - (height * logging-cost)
   ifelse diameter >= 0.1 [
     set profit profit + (tree-wood-volume * wood-price)
   ] [
@@ -125,10 +122,10 @@ to logging
     chop-tree
   ]
 
-  if max-trees-to-cut - count dead-trees > 0 [
+  if max-trees-to-cut - chopped-trees > 0 [
     ;; mature trees
     let mature-trees trees with [age >= rotation-age and not dead?]
-    ask up-to-n-of (max-trees-to-cut - count dead-trees) mature-trees [
+    ask up-to-n-of (max-trees-to-cut - chopped-trees) mature-trees [
       set chopped-trees chopped-trees + 1
       chop-tree
     ]
@@ -253,7 +250,7 @@ end
 ;; projected crown area
 ;; https://bg.copernicus.org/articles/11/6711/2014/bg-11-6711-2014.pdf
 to-report tree-crown-area
-  report 0.5 * π * diameter * height
+  report 0.2 * π * diameter * height
 end
 
 to-report circle-area [radius]
@@ -263,11 +260,11 @@ end
 GRAPHICS-WINDOW
 224
 17
-424
-218
+784
+578
 -1
 -1
-32.0
+39.6
 1
 10
 1
@@ -278,9 +275,9 @@ GRAPHICS-WINDOW
 1
 1
 0
-5
+13
 0
-5
+13
 1
 1
 1
@@ -337,10 +334,10 @@ years
 HORIZONTAL
 
 PLOT
-1070
-46
-1270
-196
+1195
+26
+1395
+176
 Logging volume
 years
 NIL
@@ -355,10 +352,10 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot logging-volume"
 
 PLOT
-721
-404
-1018
-563
+846
+384
+1143
+543
 Tree age
 years
 age
@@ -374,10 +371,10 @@ PENS
 "max" 1.0 0 -2674135 true "" "plot max [age] of trees"
 
 PLOT
-1067
-228
-1298
-399
+1192
+208
+1423
+379
 Average tree wood volume
 years
 volume (m^3)
@@ -400,17 +397,17 @@ tree-distance
 tree-distance
 1
 5
-4.0
+2.2
 0.1
 1
 meters
 HORIZONTAL
 
 PLOT
-717
-44
-1022
-199
+842
+24
+1147
+179
 Tree diameter
 years
 cm
@@ -426,10 +423,10 @@ PENS
 "max" 1.0 0 -2674135 true "" "plot max [diameter * 100] of trees"
 
 PLOT
-720
-220
-1016
-383
+845
+200
+1141
+363
 Tree hight
 years
 m
@@ -467,10 +464,10 @@ seedling-price
 Number
 
 PLOT
-1033
-408
-1250
-568
+1158
+388
+1375
+548
 Profit
 NIL
 NIL
@@ -484,22 +481,11 @@ false
 PENS
 "default" 1.0 0 -16777216 true "" "plot profit"
 
-INPUTBOX
-11
-277
-160
-337
-logging-cost
-0.0
-1
-0
-Number
-
 PLOT
-1263
-414
-1463
+1247
 564
+1447
+714
 Average profit per tree
 NIL
 NIL
@@ -512,6 +498,26 @@ false
 "" ""
 PENS
 "default" 10.0 0 -16777216 true "" "if ticks mod logging-period = 0 [\nplot average-tree-profit\n]"
+
+PLOT
+846
+574
+1224
+724
+Logging percetage
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"" ""
+PENS
+"percentage of chopped trees" 1.0 0 -16777216 true "" "plot logging-percentage"
+"dead trees" 1.0 0 -2674135 true "" "plot logging-dead"
+"unsuitable trees" 1.0 0 -13791810 true "" "plot logging-unsuitable"
 
 @#$#@#$#@
 @#$#@#$#@
@@ -805,42 +811,12 @@ repeat 180 [ go ]
 @#$#@#$#@
 @#$#@#$#@
 <experiments>
-  <experiment name="experiment" repetitions="5" runMetricsEveryStep="true">
+  <experiment name="final-parameter-search" repetitions="2" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <timeLimit steps="5000"/>
     <metric>profit</metric>
-    <metric>average-tree-profit</metric>
-    <enumeratedValueSet variable="rotation-age">
-      <value value="30"/>
-      <value value="50"/>
-      <value value="80"/>
-      <value value="110"/>
-      <value value="130"/>
-      <value value="150"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="tree-distance">
-      <value value="1"/>
-      <value value="2"/>
-      <value value="3"/>
-      <value value="4"/>
-      <value value="5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="logging-cost">
-      <value value="0"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wood-price">
-      <value value="500"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="seedling-price">
-      <value value="10"/>
-    </enumeratedValueSet>
-  </experiment>
-  <experiment name="experiment" repetitions="1" runMetricsEveryStep="true">
-    <setup>setup</setup>
-    <go>go</go>
-    <timeLimit steps="5000"/>
-    <metric>profit</metric>
+    <metric>logging-volume</metric>
     <metric>average-tree-profit</metric>
     <metric>logging-percentage</metric>
     <metric>logging-dead</metric>
@@ -853,19 +829,37 @@ repeat 180 [ go ]
     <metric>max [height] of trees</metric>
     <enumeratedValueSet variable="rotation-age">
       <value value="30"/>
+      <value value="40"/>
+      <value value="50"/>
       <value value="60"/>
+      <value value="70"/>
+      <value value="80"/>
       <value value="90"/>
+      <value value="100"/>
+      <value value="110"/>
       <value value="120"/>
+      <value value="130"/>
+      <value value="140"/>
       <value value="150"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="tree-distance">
+      <value value="1"/>
+      <value value="1.25"/>
+      <value value="1.5"/>
+      <value value="1.75"/>
       <value value="2"/>
+      <value value="2.25"/>
+      <value value="2.5"/>
+      <value value="2.75"/>
       <value value="3"/>
+      <value value="3.25"/>
+      <value value="3.5"/>
+      <value value="3.75"/>
       <value value="4"/>
+      <value value="4.25"/>
+      <value value="4.5"/>
+      <value value="4.75"/>
       <value value="5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="logging-cost">
-      <value value="0"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="wood-price">
       <value value="500"/>
