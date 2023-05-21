@@ -42,8 +42,7 @@ to setup
 
   ; Set the size of each patch to represent 1 square meter
   let patch-size-meters tree-distance
-  ; Calculate the number of patches in each dimension for 1 ha
-  let area 900 ;; m2
+  let area 625 ;; m2
   let num-patches round(sqrt (area) / patch-size-meters) - 1
   resize-world 0 num-patches 0 num-patches
 
@@ -190,7 +189,7 @@ to-report tree-mortality-probability
   let neighbor-mortality-percentage count (turtles-on neighbors) with [dead?] / 8
 
   let competition-mortality exp(0.01 * neighbor-mortality-percentage) - 1
-  let size-mortality 1 - gaussian-function diameter 0.25 2
+  let size-mortality 1 - gaussian-function age 40 100000
   report competition-mortality + size-mortality
 end
 
@@ -260,11 +259,11 @@ end
 GRAPHICS-WINDOW
 224
 17
-784
-578
+682
+476
 -1
 -1
-39.6
+90.0
 1
 10
 1
@@ -275,9 +274,9 @@ GRAPHICS-WINDOW
 1
 1
 0
-13
+4
 0
-13
+4
 1
 1
 1
@@ -397,7 +396,7 @@ tree-distance
 tree-distance
 1
 5
-2.2
+5.0
 0.1
 1
 meters
