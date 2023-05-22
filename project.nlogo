@@ -55,6 +55,7 @@ to setup
   set max-height 40
   set logging-period 10
   set max-logging-percentage 0.33
+  set profit 0
 
   plant-trees
   draw-trees
@@ -79,7 +80,6 @@ to go
   ]
 
   draw-trees
-;  print [stand-basal-area (max-height * tan-30)] of one-of trees
   tick
 end
 
@@ -109,7 +109,6 @@ to logging
 
   set logging-volume 0
   set profit 0
-
   set logging-dead 0
   set logging-unsuitable 0
 
@@ -129,7 +128,6 @@ to logging
       chop-tree
     ]
   ]
-
 
   set logging-percentage chopped-trees / (count patches)
   if chopped-trees != 0 [
@@ -214,11 +212,6 @@ to-report competition-diameter-growth-effect
   report gaussian-function (stand-basal-area (max-height * tan-30)) 0 1.5
 end
 
-to-report gaussian-function [x m w]
-  report exp(- (((x - m) ^ 2) / w)) ;; Gaussian function
-end
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; YIELD MODELS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -255,15 +248,19 @@ end
 to-report circle-area [radius]
   report π * (radius ^ 2)
 end
+
+to-report gaussian-function [x m w]
+  report exp(- (((x - m) ^ 2) / w)) ;; Gaussian function
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 224
 17
-682
-476
+700
+494
 -1
 -1
-90.0
+46.800000000000004
 1
 10
 1
@@ -274,9 +271,9 @@ GRAPHICS-WINDOW
 1
 1
 0
-4
+9
 0
-4
+9
 1
 1
 1
@@ -396,7 +393,7 @@ tree-distance
 tree-distance
 1
 5
-5.0
+2.6
 0.1
 1
 meters
